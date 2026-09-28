@@ -1,0 +1,40 @@
+﻿<Window x:Class="WpfApp1209afvd.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfApp1209afvd"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800"
+        Background="#FF85C1">
+
+    <Grid>
+        <Button Content="1" 
+                Width="200" 
+                Height="60" 
+                Foreground="Black" 
+                FontSize="24" 
+                FontWeight="Bold"
+                BorderBrush="Black"
+                BorderThickness="4"
+                Click="Lab1Button_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" 
+                            Background="#FF1493" 
+                            BorderBrush="Black" 
+                            BorderThickness="4" 
+                            CornerRadius="30">
+                        <ContentPresenter HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#C71585"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+    </Grid>
+</Window>
