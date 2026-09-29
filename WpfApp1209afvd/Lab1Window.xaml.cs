@@ -11,7 +11,6 @@ namespace WpfApp1209afvd
 {
     public partial class Lab1Window : Window
     {
-        private const int VisualizationLimit = 20;
         private const int MaxArraySize = 100_000;
         private const int RoundingDigits = 2;
         private const int DefaultBogoLimit = 1000;
@@ -172,8 +171,7 @@ namespace WpfApp1209afvd
                 visualizationSource = sourceNumbers;
             }
 
-            List<double> visualizationNumbers = visualizationSource.Take(VisualizationLimit).ToList();
-            TextBoxSortedArray.Text = FormatArray(visualizationNumbers);
+            TextBoxSortedArray.Text = FormatArray(visualizationSource);
         }
 
         private (List<double> sorted, int iterations) MeasureSort(string name, List<double> input, bool ascending,
@@ -439,16 +437,24 @@ namespace WpfApp1209afvd
 
             for (int outerIndex = 0; outerIndex < result.Count - 1; ++outerIndex)
             {
+                ++iterationCount;
+
+                bool swapped = false;
+
                 for (int innerIndex = 0; innerIndex < result.Count - outerIndex - 1; ++innerIndex)
                 {
-                    ++iterationCount;
-
                     if (NeedSwap(result[innerIndex], result[innerIndex + 1], ascending))
                     {
                         double temporary = result[innerIndex];
                         result[innerIndex] = result[innerIndex + 1];
                         result[innerIndex + 1] = temporary;
+                        swapped = true;
                     }
+                }
+
+                if (!swapped)
+                {
+                    break;
                 }
             }
 
@@ -493,15 +499,18 @@ namespace WpfApp1209afvd
 
             while (leftBoundary < rightBoundary)
             {
+                ++iterationCount;
+
+                bool swapped = false;
+
                 for (int forwardIndex = leftBoundary; forwardIndex < rightBoundary; ++forwardIndex)
                 {
-                    ++iterationCount;
-
                     if (NeedSwap(result[forwardIndex], result[forwardIndex + 1], ascending))
                     {
                         double temporary = result[forwardIndex];
                         result[forwardIndex] = result[forwardIndex + 1];
                         result[forwardIndex + 1] = temporary;
+                        swapped = true;
                     }
                 }
 
@@ -509,17 +518,21 @@ namespace WpfApp1209afvd
 
                 for (int backwardIndex = rightBoundary; backwardIndex > leftBoundary; --backwardIndex)
                 {
-                    ++iterationCount;
-
                     if (NeedSwap(result[backwardIndex - 1], result[backwardIndex], ascending))
                     {
                         double temporary = result[backwardIndex - 1];
                         result[backwardIndex - 1] = result[backwardIndex];
                         result[backwardIndex] = temporary;
+                        swapped = true;
                     }
                 }
 
                 ++leftBoundary;
+
+                if (!swapped)
+                {
+                    break;
+                }
             }
 
             return (result, iterationCount);
@@ -529,65 +542,68 @@ namespace WpfApp1209afvd
         {
             List<double> result = new List<double>(input);
             int iterationCount = 0;
-            Random random = new Random();
 
-            QuickSortRecursive(result, 0, result.Count - 1, ascending, ref iterationCount, random);
+            QuickSortRecursive(result, 0, result.Count - 1, ascending, ref iterationCount);
 
             return (result, iterationCount);
         }
 
-        private void QuickSortRecursive(List<double> array, int leftIndex, int rightIndex, bool ascending, ref int iterationCount, Random random)
+        private void QuickSortRecursive(List<double> array, int leftIndex, int rightIndex, bool ascending, ref int iterationCount)
         {
             if (leftIndex >= rightIndex)
             {
                 return;
             }
 
-            int pivotIndex = leftIndex + random.Next(rightIndex - leftIndex + 1);
-            double pivotValue = array[pivotIndex];
+            int pivotIndex = Partition(array, leftIndex, rightIndex, ascending, ref iterationCount);
 
-            int lessIndex = leftIndex;
-            int currentIndex = leftIndex;
-            int greaterIndex = rightIndex;
+            QuickSortRecursive(array, leftIndex, pivotIndex - 1, ascending, ref iterationCount);
+            QuickSortRecursive(array, pivotIndex + 1, rightIndex, ascending, ref iterationCount);
+        }
 
-            while (currentIndex <= greaterIndex)
+        private int Partition(List<double> array, int leftIndex, int rightIndex, bool ascending, ref int iterationCount)
+        {
+            double pivotValue = array[rightIndex];
+            int smallerIndex = leftIndex - 1;
+
+            for (int currentIndex = leftIndex; currentIndex < rightIndex; ++currentIndex)
             {
                 ++iterationCount;
 
-                bool isLess = ascending ? array[currentIndex] < pivotValue : array[currentIndex] > pivotValue;
-                bool isGreater = ascending ? array[currentIndex] > pivotValue : array[currentIndex] < pivotValue;
+                bool needMove = false;
 
-                if (isLess)
+                if (ascending)
                 {
-                    Swap(array, lessIndex, currentIndex);
-                    ++lessIndex;
-                    ++currentIndex;
-                }
-                else if (isGreater)
-                {
-                    Swap(array, currentIndex, greaterIndex);
-                    --greaterIndex;
+                    if (array[currentIndex] < pivotValue)
+                    {
+                        needMove = true;
+                    }
                 }
                 else
                 {
-                    ++currentIndex;
+                    if (array[currentIndex] > pivotValue)
+                    {
+                        needMove = true;
+                    }
+                }
+
+                if (needMove)
+                {
+                    ++smallerIndex;
+
+                    double temporary = array[smallerIndex];
+                    array[smallerIndex] = array[currentIndex];
+                    array[currentIndex] = temporary;
                 }
             }
 
-            QuickSortRecursive(array, leftIndex, lessIndex - 1, ascending, ref iterationCount, random);
-            QuickSortRecursive(array, greaterIndex + 1, rightIndex, ascending, ref iterationCount, random);
-        }
+            ++smallerIndex;
 
-        private void Swap(List<double> array, int firstIndex, int secondIndex)
-        {
-            if (firstIndex == secondIndex)
-            {
-                return;
-            }
+            double pivotTemporary = array[smallerIndex];
+            array[smallerIndex] = array[rightIndex];
+            array[rightIndex] = pivotTemporary;
 
-            double temporary = array[firstIndex];
-            array[firstIndex] = array[secondIndex];
-            array[secondIndex] = temporary;
+            return smallerIndex;
         }
 
         private (List<double> sorted, int iterations, bool completed) BogoSort(List<double> input, bool ascending, int maxIterations)
@@ -596,16 +612,20 @@ namespace WpfApp1209afvd
             int iterationCount = 0;
             Random random = new Random();
 
+            if (IsSorted(result, ascending))
+            {
+                return (result, 0, true);
+            }
+
             while (iterationCount < maxIterations)
             {
                 ++iterationCount;
+                ShuffleList(result, random);
 
                 if (IsSorted(result, ascending))
                 {
                     return (result, iterationCount, true);
                 }
-
-                ShuffleList(result, random);
             }
 
             return (result, iterationCount, false);
