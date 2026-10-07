@@ -30,5 +30,10 @@ namespace WpfApp1209afvd
             Lab1Window lab1 = new Lab1Window();
             lab1.Show();
         }
+        private void Lab2Button_Click(object sender, RoutedEventArgs e)
+        {
+            Lab2Window lab2 = new Lab2Window();
+            lab2.Show();
+        }
     }
 }

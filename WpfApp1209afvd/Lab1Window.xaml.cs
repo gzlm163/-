@@ -94,6 +94,7 @@ namespace WpfApp1209afvd
 
             List<SortResult> results = new List<SortResult>();
             List<double> visualizationSource = null;
+            List<double> bogoVisualization = null;
 
             if (CheckBubble.IsChecked == true)
             {
@@ -152,10 +153,7 @@ namespace WpfApp1209afvd
                     Time = stopwatch.Elapsed.TotalMilliseconds.ToString("F3")
                 });
 
-                if (completed)
-                {
-                    visualizationSource = sorted;
-                }
+                bogoVisualization = sorted;
             }
 
             if (results.Count == 0)
@@ -168,7 +166,14 @@ namespace WpfApp1209afvd
 
             if (visualizationSource == null)
             {
-                visualizationSource = sourceNumbers;
+                if (bogoVisualization != null)
+                {
+                    visualizationSource = bogoVisualization;
+                }
+                else
+                {
+                    visualizationSource = sourceNumbers;
+                }
             }
 
             TextBoxSortedArray.Text = FormatArray(visualizationSource);
