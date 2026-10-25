@@ -10,7 +10,6 @@ namespace WpfApp1209afvd
 {
     public partial class Lab2Window : Window
     {
-        private const int MaxIterations = 10_000;
         private const double PlotMargin = 30;
 
         public Lab2Window()
@@ -29,15 +28,12 @@ namespace WpfApp1209afvd
                 return false;
             }
 
-            // 1. Заменяем ^ на ** (возведение в степень)
             string preparedFormula = formula.Replace("^", "**");
 
-            // 2. Делаем функции нечувствительными к регистру (sin -> Sin)
             string[] mathFunctions = { "sin", "cos", "tan", "asin", "acos", "atan", "sqrt", "abs", "exp", "log", "ln" };
             foreach (string func in mathFunctions)
             {
-                string properName = char.ToUpper(func[0]) + func.Substring(1); // Sin, Cos...
-                // \b означает границу слова, чтобы не заменить буквы внутри других слов
+                string properName = char.ToUpper(func[0]) + func.Substring(1);
                 preparedFormula = Regex.Replace(preparedFormula, @"\b" + func + @"\b", properName, RegexOptions.IgnoreCase);
             }
 
@@ -112,26 +108,19 @@ namespace WpfApp1209afvd
                 return false;
             }
 
-            int iterationCount = 0;
-
             while (rightBoundary - leftBoundary > accuracy)
             {
-                if (++iterationCount > MaxIterations)
-                {
-                    error = "Превышен лимит итераций";
-                    return false;
-                }
-
                 double middlePoint = (leftBoundary + rightBoundary) / 2;
                 double valueAtMiddle = function(middlePoint);
 
-                if (double.IsNaN(valueAtMiddle))
+
+                if (double.IsNaN(valueAtMiddle) || Math.Abs(valueAtMiddle) > 1000000)
                 {
-                    error = "Функция не определена в точке";
+                    error = "Функция имеет разрыв на отрезке";
                     return false;
                 }
 
-                if (valueAtLeft * valueAtMiddle < 0)
+                if (valueAtLeft * valueAtMiddle < 0 || Math.Abs(valueAtMiddle) < 1e-12)
                 {
                     rightBoundary = middlePoint;
                     valueAtRight = valueAtMiddle;

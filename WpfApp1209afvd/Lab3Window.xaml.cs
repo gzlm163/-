@@ -10,7 +10,6 @@ namespace WpfApp1209afvd
 {
     public partial class Lab3Window : Window
     {
-        private const int MaxIterations = 10_000;
         private const double PlotMargin = 30;
 
         public Lab3Window()
@@ -31,7 +30,6 @@ namespace WpfApp1209afvd
 
             string preparedFormula = formula.Replace("^", "**");
             string[] mathFunctions = { "sin", "cos", "tan", "asin", "acos", "atan", "sqrt", "abs", "exp", "log", "ln" };
-
             foreach (string func in mathFunctions)
             {
                 string properName = char.ToUpper(func[0]) + func.Substring(1);
@@ -42,7 +40,6 @@ namespace WpfApp1209afvd
             {
                 var testExpression = new NCalc.Expression(preparedFormula);
                 testExpression.Parameters["x"] = 1.0;
-
                 if (testExpression.Evaluate() == null)
                 {
                     error = "Ошибка вычисления формулы";
@@ -55,8 +52,8 @@ namespace WpfApp1209afvd
                     {
                         var expression = new NCalc.Expression(preparedFormula);
                         expression.Parameters["x"] = argumentX;
-                        var evaluationResult = expression.Evaluate();
-                        return evaluationResult == null ? double.NaN : Convert.ToDouble(evaluationResult);
+                        var result = expression.Evaluate();
+                        return result == null ? double.NaN : Convert.ToDouble(result);
                     }
                     catch { return double.NaN; }
                 };
@@ -88,205 +85,165 @@ namespace WpfApp1209afvd
                 error = "Поле \"" + fieldName + "\" не является числом";
                 return false;
             }
-
             return true;
         }
 
-        // --- МЕТОД ЗОЛОТОГО СЕЧЕНИЯ ---
-        private bool TryGoldenSection(Func<double, double> function, double leftBoundary, double rightBoundary, double accuracy, bool findMaximum, out double extremumX, out double extremumY, out string error)
+        private void FindIsolationInterval(Func<double, double> function, double start, double end, bool findMax, out double left, out double right, out string error)
         {
-            extremumX = 0;
-            extremumY = 0;
+            left = start;
+            right = end;
             error = null;
 
-            Func<double, double> targetFunction = findMaximum ? (x => -function(x)) : function;
+            double h = (end - start) / 100.0;
+            double x = start;
+            double fx = function(x);
 
-            double phi = (1 + Math.Sqrt(5)) / 2; // 1.618...
-            double resphi = 2 - phi;             // 0.3819...
-
-            double x1 = leftBoundary + resphi * (rightBoundary - leftBoundary);
-            double x2 = rightBoundary - resphi * (rightBoundary - leftBoundary);
-            double f1 = targetFunction(x1);
-            double f2 = targetFunction(x2);
-
-            int iterationCount = 0;
-
-            while (Math.Abs(rightBoundary - leftBoundary) > accuracy)
+            while (x + h <= end)
             {
-                if (++iterationCount > MaxIterations)
+                double xNext = x + h;
+                double fxNext = function(xNext);
+
+                bool found = findMax ? (fxNext < fx) : (fxNext > fx);
+
+                if (found)
                 {
-                    error = "Превышен лимит итераций";
-                    return false;
+                    left = x - h;
+                    right = xNext;
+                    return;
                 }
 
+                x = xNext;
+                fx = fxNext;
+            }
+
+            error = "На отрезке нет экстремума (функция монотонна)";
+        }
+
+        private double GoldenSectionSearch(Func<double, double> function, double left, double right, double accuracy, bool findMax)
+        {
+            double alpha = (3.0 - Math.Sqrt(5.0)) / 2.0;
+
+            double x1 = left + alpha * (right - left);
+            double x2 = right - alpha * (right - left);
+
+            Func<double, double> f = findMax ? (x => -function(x)) : function;
+
+            double f1 = f(x1);
+            double f2 = f(x2);
+
+            while (Math.Abs(right - left) > accuracy)
+            {
                 if (f1 < f2)
                 {
-                    rightBoundary = x2;
+                    right = x2;
                     x2 = x1;
                     f2 = f1;
-                    x1 = leftBoundary + resphi * (rightBoundary - leftBoundary);
-                    f1 = targetFunction(x1);
+                    x1 = left + alpha * (right - left);
+                    f1 = f(x1);
                 }
                 else
                 {
-                    leftBoundary = x1;
+                    left = x1;
                     x1 = x2;
                     f1 = f2;
-                    x2 = rightBoundary - resphi * (rightBoundary - leftBoundary);
-                    f2 = targetFunction(x2);
+                    x2 = right - alpha * (right - left);
+                    f2 = f(x2);
                 }
             }
 
-            extremumX = (leftBoundary + rightBoundary) / 2;
-            extremumY = function(extremumX);
-            return true;
+            return (left + right) / 2;
         }
 
-        // --- МЕТОД ДИХОТОМИИ ДЛЯ КОРНЯ ---
-        private bool TryBisection(Func<double, double> function, double leftBoundary, double rightBoundary, double accuracy, out double root, out string error)
+        private double FindRoot(Func<double, double> function, double left, double right, double accuracy)
         {
-            root = 0;
-            error = null;
-
-            double valueAtLeft = function(leftBoundary);
-            double valueAtRight = function(rightBoundary);
-
-            if (valueAtLeft * valueAtRight >= 0)
-            {
-                error = "На концах отрезка функция не меняет знак";
-                return false;
-            }
-
-            int iterationCount = 0;
-
-            while (rightBoundary - leftBoundary > accuracy)
-            {
-                if (++iterationCount > MaxIterations)
-                {
-                    error = "Превышен лимит итераций";
-                    return false;
-                }
-
-                double middlePoint = (leftBoundary + rightBoundary) / 2;
-                double valueAtMiddle = function(middlePoint);
-
-                if (double.IsNaN(valueAtMiddle))
-                {
-                    error = "Функция не определена в точке";
-                    return false;
-                }
-
-                if (valueAtLeft * valueAtMiddle < 0)
-                {
-                    rightBoundary = middlePoint;
-                    valueAtRight = valueAtMiddle;
-                }
-                else
-                {
-                    leftBoundary = middlePoint;
-                    valueAtLeft = valueAtMiddle;
-                }
-            }
-
-            root = (leftBoundary + rightBoundary) / 2;
-            return true;
+            return GoldenSectionSearch(x => Math.Abs(function(x)), left, right, accuracy, false);
         }
 
-        private void DrawPlot(Func<double, double> function, double leftBoundary, double rightBoundary, double? specialPointX, string pointType)
+        private void DrawPlot(Func<double, double> function, double left, double right, double? specialPointX, string pointType)
         {
             PlotCanvas.Children.Clear();
 
             double canvasWidth = PlotCanvas.ActualWidth;
             double canvasHeight = PlotCanvas.ActualHeight;
-
             if (canvasWidth <= 2 * PlotMargin || canvasHeight <= 2 * PlotMargin) return;
 
             int pointCount = 500;
-            double[] plotX = new double[pointCount + 1];
-            double[] plotY = new double[pointCount + 1];
-
             double minValueY = double.MaxValue;
             double maxValueY = double.MinValue;
 
-            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
+            for (int i = 0; i <= pointCount; ++i)
             {
-                double currentX = leftBoundary + (rightBoundary - leftBoundary) * pointIndex / pointCount;
-                double currentY = function(currentX);
-
-                plotX[pointIndex] = currentX;
-                plotY[pointIndex] = currentY;
-
-                if (!double.IsNaN(currentY) && !double.IsInfinity(currentY) && Math.Abs(currentY) < 1e6)
+                double x = left + (right - left) * i / pointCount;
+                double y = function(x);
+                if (!double.IsNaN(y) && !double.IsInfinity(y) && Math.Abs(y) < 1e6)
                 {
-                    if (currentY < minValueY) minValueY = currentY;
-                    if (currentY > maxValueY) maxValueY = currentY;
+                    if (y < minValueY) minValueY = y;
+                    if (y > maxValueY) maxValueY = y;
                 }
             }
 
             if (minValueY > maxValueY) { minValueY = -1; maxValueY = 1; }
-            double valueRangeY = maxValueY - minValueY;
-            if (valueRangeY < 1e-9) valueRangeY = 1;
-            minValueY -= valueRangeY * 0.1;
-            maxValueY += valueRangeY * 0.1;
+            double rangeY = maxValueY - minValueY;
+            if (rangeY < 1e-9) rangeY = 1;
+            minValueY -= rangeY * 0.1;
+            maxValueY += rangeY * 0.1;
 
-            double plottingWidth = canvasWidth - 2 * PlotMargin;
-            double plottingHeight = canvasHeight - 2 * PlotMargin;
+            double plotWidth = canvasWidth - 2 * PlotMargin;
+            double plotHeight = canvasHeight - 2 * PlotMargin;
 
-            Func<double, double> mapToCanvasX = mathX => PlotMargin + (mathX - leftBoundary) / (rightBoundary - leftBoundary) * plottingWidth;
-            Func<double, double> mapToCanvasY = mathY => canvasHeight - PlotMargin - (mathY - minValueY) / (maxValueY - minValueY) * plottingHeight;
+            Func<double, double> mapToCanvasX = mathX => PlotMargin + (mathX - left) / (right - left) * plotWidth;
+            Func<double, double> mapToCanvasY = mathY => canvasHeight - PlotMargin - (mathY - minValueY) / (maxValueY - minValueY) * plotHeight;
 
-            double axisYPixel = mapToCanvasY(0);
-            if (axisYPixel < PlotMargin) axisYPixel = PlotMargin;
-            if (axisYPixel > canvasHeight - PlotMargin) axisYPixel = canvasHeight - PlotMargin;
+            double axisY = mapToCanvasY(0);
+            if (axisY < PlotMargin) axisY = PlotMargin;
+            if (axisY > canvasHeight - PlotMargin) axisY = canvasHeight - PlotMargin;
 
-            Line xAxisLine = new Line { X1 = PlotMargin, Y1 = axisYPixel, X2 = canvasWidth - PlotMargin, Y2 = axisYPixel, Stroke = Brushes.Black, StrokeThickness = 2 };
-            PlotCanvas.Children.Add(xAxisLine);
+            Line xAxis = new Line { X1 = PlotMargin, Y1 = axisY, X2 = canvasWidth - PlotMargin, Y2 = axisY, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(xAxis);
 
-            double axisXPixel = mapToCanvasX(0);
-            if (axisXPixel < PlotMargin) axisXPixel = PlotMargin;
-            if (axisXPixel > canvasWidth - PlotMargin) axisXPixel = canvasWidth - PlotMargin;
+            double axisX = mapToCanvasX(0);
+            if (axisX < PlotMargin) axisX = PlotMargin;
+            if (axisX > canvasWidth - PlotMargin) axisX = canvasWidth - PlotMargin;
 
-            Line yAxisLine = new Line { X1 = axisXPixel, Y1 = PlotMargin, X2 = axisXPixel, Y2 = canvasHeight - PlotMargin, Stroke = Brushes.Black, StrokeThickness = 2 };
-            PlotCanvas.Children.Add(yAxisLine);
+            Line yAxis = new Line { X1 = axisX, Y1 = PlotMargin, X2 = axisX, Y2 = canvasHeight - PlotMargin, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(yAxis);
 
-            AddAxisLabel(leftBoundary.ToString("F2"), mapToCanvasX(leftBoundary), canvasHeight - PlotMargin + 5);
-            AddAxisLabel(rightBoundary.ToString("F2"), mapToCanvasX(rightBoundary) - 30, canvasHeight - PlotMargin + 5);
+            AddAxisLabel(left.ToString("F2"), mapToCanvasX(left), canvasHeight - PlotMargin + 5);
+            AddAxisLabel(right.ToString("F2"), mapToCanvasX(right) - 30, canvasHeight - PlotMargin + 5);
 
-            Polyline functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
+            Polyline line = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
 
-            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
+            for (int i = 0; i <= pointCount; ++i)
             {
-                double currentX = plotX[pointIndex];
-                double currentY = plotY[pointIndex];
+                double x = left + (right - left) * i / pointCount;
+                double y = function(x);
 
-                if (double.IsNaN(currentY) || double.IsInfinity(currentY) || Math.Abs(currentY) > 1e6)
+                if (double.IsNaN(y) || double.IsInfinity(y) || Math.Abs(y) > 1e6)
                 {
-                    if (functionLine.Points.Count > 0)
+                    if (line.Points.Count > 0)
                     {
-                        PlotCanvas.Children.Add(functionLine);
-                        functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
+                        PlotCanvas.Children.Add(line);
+                        line = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
                     }
                     continue;
                 }
-
-                functionLine.Points.Add(new Point(mapToCanvasX(currentX), mapToCanvasY(currentY)));
+                line.Points.Add(new Point(mapToCanvasX(x), mapToCanvasY(y)));
             }
-
-            if (functionLine.Points.Count > 0) PlotCanvas.Children.Add(functionLine);
+            if (line.Points.Count > 0) PlotCanvas.Children.Add(line);
 
             if (specialPointX.HasValue)
             {
-                double pixelX = mapToCanvasX(specialPointX.Value);
-                double pixelY = mapToCanvasY(function(specialPointX.Value));
+                double px = mapToCanvasX(specialPointX.Value);
+                double py = mapToCanvasY(function(specialPointX.Value));
 
                 Ellipse marker = new Ellipse { Width = 12, Height = 12, Fill = new SolidColorBrush(Color.FromRgb(0x4A, 0x14, 0x8C)), Stroke = Brushes.White, StrokeThickness = 1 };
-                Canvas.SetLeft(marker, pixelX - 6);
-                Canvas.SetTop(marker, pixelY - 6);
+                Canvas.SetLeft(marker, px - 6);
+                Canvas.SetTop(marker, py - 6);
                 PlotCanvas.Children.Add(marker);
 
                 TextBlock label = new TextBlock { Text = pointType, Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 12 };
-                Canvas.SetLeft(label, pixelX + 10);
-                Canvas.SetTop(label, pixelY - 10);
+                Canvas.SetLeft(label, px + 10);
+                Canvas.SetTop(label, py - 10);
                 PlotCanvas.Children.Add(label);
             }
         }
@@ -301,60 +258,65 @@ namespace WpfApp1209afvd
 
         private void ButtonPlot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
-            DrawPlot(function, leftBoundary, rightBoundary, null, "");
+            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
+            DrawPlot(function, a, b, null, "");
         }
 
         private void ButtonFindExtremum_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
+            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
 
             bool isMax = RadioMax.IsChecked == true;
 
-            if (TryGoldenSection(function, leftBoundary, rightBoundary, accuracy, isMax, out double extremumX, out double extremumY, out string error))
+            FindIsolationInterval(function, a, b, isMax, out double left, out double right, out string isolationError);
+
+            if (isolationError != null)
             {
-                string type = isMax ? "Максимум" : "Минимум";
-                TextBoxResult.Text = $"{type}:\r\nx = {extremumX:F6}\r\ny = {extremumY:F6}";
-                DrawPlot(function, leftBoundary, rightBoundary, extremumX, type);
+                TextBoxResult.Text = isolationError;
+                return;
             }
-            else
-            {
-                TextBoxResult.Text = error;
-                DrawPlot(function, leftBoundary, rightBoundary, null, "");
-            }
+
+            double extremumX = GoldenSectionSearch(function, left, right, accuracy, isMax);
+            double extremumY = function(extremumX);
+
+            string type = isMax ? "Максимум" : "Минимум";
+            TextBoxResult.Text = $"{type}:\r\nx = {extremumX:F6}\r\ny = {extremumY:F6}";
+            DrawPlot(function, a, b, extremumX, type);
         }
 
         private void ButtonFindRoot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
+            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
 
-            if (TryBisection(function, leftBoundary, rightBoundary, accuracy, out double root, out string error))
+            double rootX = FindRoot(function, a, b, accuracy);
+            double rootY = function(rootX);
+
+            if (Math.Abs(rootY) > accuracy)
             {
-                TextBoxResult.Text = $"Корень:\r\nx = {root:F6}";
-                DrawPlot(function, leftBoundary, rightBoundary, root, "Корень");
+                TextBoxResult.Text = "Корень не найден (функция не пересекает ноль)";
+                DrawPlot(function, a, b, null, "");
+                return;
             }
-            else
-            {
-                TextBoxResult.Text = error;
-                DrawPlot(function, leftBoundary, rightBoundary, null, "");
-            }
+
+            TextBoxResult.Text = $"Корень:\r\nx = {rootX:F6}\r\ny = {rootY:F6}";
+            DrawPlot(function, a, b, rootX, "Корень");
         }
 
-        private bool ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)
+        private bool ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)
         {
-            function = null; leftBoundary = 0; rightBoundary = 0; accuracy = 0;
+            function = null; a = 0; b = 0; accuracy = 0;
 
-            if (!TryParseFunction(TextBoxFunction.Text, out function, out string formulaError)) { MessageBox.Show(formulaError); return false; }
-            if (!TryParseDouble(TextBoxA.Text, "a", out leftBoundary, out string aError)) { MessageBox.Show(aError); return false; }
-            if (!TryParseDouble(TextBoxB.Text, "b", out rightBoundary, out string bError)) { MessageBox.Show(bError); return false; }
+            if (!TryParseFunction(TextBoxFunction.Text, out function, out string fError)) { MessageBox.Show(fError); return false; }
+            if (!TryParseDouble(TextBoxA.Text, "a", out a, out string aError)) { MessageBox.Show(aError); return false; }
+            if (!TryParseDouble(TextBoxB.Text, "b", out b, out string bError)) { MessageBox.Show(bError); return false; }
 
             if (!int.TryParse(TextBoxE.Text, out int decimalPlaces)) { MessageBox.Show("Количество знаков целое число"); return false; }
             if (decimalPlaces <= 0) { MessageBox.Show("Количество знаков > 0"); return false; }
 
             accuracy = 1.0 / Math.Pow(10, decimalPlaces);
 
-            if (leftBoundary >= rightBoundary) { MessageBox.Show("a должно быть меньше b"); return false; }
-            if (accuracy >= rightBoundary - leftBoundary) { MessageBox.Show("Слишком высокая точность"); return false; }
+            if (a >= b) { MessageBox.Show("a должно быть меньше b"); return false; }
+            if (accuracy >= b - a) { MessageBox.Show("Слишком высокая точность"); return false; }
 
             return true;
         }
