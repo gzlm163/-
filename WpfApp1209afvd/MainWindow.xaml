@@ -9,6 +9,7 @@
         Background="#FF85C1">
 
     <Grid>
+        <!-- Кнопка 1 (оригинальная) -->
         <Button Content="1" 
                 Width="200" 
                 Height="60" 
@@ -37,6 +38,7 @@
             </Button.Template>
         </Button>
 
+        <!-- Кнопка 2 (оригинальная) -->
         <Button Content="2" 
                 Width="90" 
                 Height="90" 
@@ -62,6 +64,37 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="border" Property="Background" Value="#880E4F"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <!-- Кнопка 3 (новая, лиловая, вертикальная, справа сверху) -->
+        <Button Content="3" 
+                Width="60" 
+                Height="120" 
+                Foreground="Black" 
+                FontSize="24" 
+                FontWeight="Bold"
+                BorderBrush="Black"
+                BorderThickness="4"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,30,50,0"
+                Click="Lab3Button_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" 
+                            Background="#9575CD" 
+                            BorderBrush="Black" 
+                            BorderThickness="4">
+                        <ContentPresenter HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#7E57C2"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

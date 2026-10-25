@@ -1,6 +1,6 @@
 ﻿using NCalc;
 using System;
-using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -11,10 +11,7 @@ namespace WpfApp1209afvd
     public partial class Lab2Window : Window
     {
         private const int MaxIterations = 10_000;
-        private const int SubIntervals = 1000;
         private const double PlotMargin = 30;
-        private const double DiscontinuityThreshold = 1e6;
-        private const double RootSearchJumpLimit = 100;
 
         public Lab2Window()
         {
@@ -32,32 +29,37 @@ namespace WpfApp1209afvd
                 return false;
             }
 
-            formula = formula.Replace("^", "**");
+            // 1. Заменяем ^ на ** (возведение в степень)
+            string preparedFormula = formula.Replace("^", "**");
+
+            // 2. Делаем функции нечувствительными к регистру (sin -> Sin)
+            string[] mathFunctions = { "sin", "cos", "tan", "asin", "acos", "atan", "sqrt", "abs", "exp", "log", "ln" };
+            foreach (string func in mathFunctions)
+            {
+                string properName = char.ToUpper(func[0]) + func.Substring(1); // Sin, Cos...
+                // \b означает границу слова, чтобы не заменить буквы внутри других слов
+                preparedFormula = Regex.Replace(preparedFormula, @"\b" + func + @"\b", properName, RegexOptions.IgnoreCase);
+            }
 
             try
             {
-                var testExpr = new NCalc.Expression(formula);
-                testExpr.Parameters["x"] = 1.0;
-                var testResult = testExpr.Evaluate();
+                var testExpression = new NCalc.Expression(preparedFormula);
+                testExpression.Parameters["x"] = 1.0;
 
-                if (testResult == null)
+                if (testExpression.Evaluate() == null)
                 {
-                    error = "Не удалось вычислить формулу";
+                    error = "Ошибка вычисления формулы";
                     return false;
                 }
 
-                function = (double x) =>
+                function = (double argumentX) =>
                 {
                     try
                     {
-                        var expr = new NCalc.Expression(formula);
-                        expr.Parameters["x"] = x;
-                        var result = expr.Evaluate();
-
-                        if (result == null)
-                            return double.NaN;
-
-                        return Convert.ToDouble(result);
+                        var expression = new NCalc.Expression(preparedFormula);
+                        expression.Parameters["x"] = argumentX;
+                        var evaluationResult = expression.Evaluate();
+                        return evaluationResult == null ? double.NaN : Convert.ToDouble(evaluationResult);
                     }
                     catch
                     {
@@ -69,427 +71,251 @@ namespace WpfApp1209afvd
             }
             catch (Exception ex)
             {
-                error = "Ошибка в формуле: " + ex.Message;
+                error = "Синтаксическая ошибка: " + ex.Message;
                 return false;
             }
         }
 
-        private bool TryParseDouble(string text, string fieldName, out double value, out string error)
+        private bool TryParseDouble(string inputText, string fieldName, out double parsedValue, out string error)
         {
-            value = 0;
+            parsedValue = 0;
             error = null;
 
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrWhiteSpace(inputText))
             {
                 error = "Поле \"" + fieldName + "\" пустое";
                 return false;
             }
 
-            string cleaned = text.Trim().Replace('.', ',');
+            string cleanedText = inputText.Trim().Replace('.', ',');
 
-            if (!double.TryParse(cleaned, out value))
+            if (!double.TryParse(cleanedText, out parsedValue))
             {
-                error = "Поле \"" + fieldName + "\" должно быть числом";
-                return false;
-            }
-
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                error = "Поле \"" + fieldName + "\" не может быть NaN или бесконечностью";
+                error = "Поле \"" + fieldName + "\" не является числом";
                 return false;
             }
 
             return true;
         }
 
-        private bool IsDiscontinuity(double value)
-        {
-            return double.IsNaN(value) || double.IsInfinity(value) || Math.Abs(value) > DiscontinuityThreshold;
-        }
-
-        private bool TryBisection(Func<double, double> f, double a, double b, double e, out double root, out string error)
+        private bool TryBisection(Func<double, double> function, double leftBoundary, double rightBoundary, double accuracy, out double root, out string error)
         {
             root = 0;
             error = null;
 
-            double fa = f(a);
-            double fb = f(b);
+            double valueAtLeft = function(leftBoundary);
+            double valueAtRight = function(rightBoundary);
 
-            if (IsDiscontinuity(fa) || IsDiscontinuity(fb))
+            if (valueAtLeft * valueAtRight >= 0)
             {
-                error = "Функция имеет разрыв на концах отрезка";
+                error = "На концах отрезка функция не меняет знак";
                 return false;
             }
 
-            if (fa * fb > 0)
-            {
-                error = "На отрезке нет смены знака";
-                return false;
-            }
+            int iterationCount = 0;
 
-            if (Math.Abs(fa) < 1e-12)
+            while (rightBoundary - leftBoundary > accuracy)
             {
-                root = a;
-                return true;
-            }
-
-            if (Math.Abs(fb) < 1e-12)
-            {
-                root = b;
-                return true;
-            }
-
-            int iterations = 0;
-
-            while (b - a > e)
-            {
-                if (++iterations > MaxIterations)
+                if (++iterationCount > MaxIterations)
                 {
                     error = "Превышен лимит итераций";
                     return false;
                 }
 
-                double x = (a + b) / 2;
-                double fx = f(x);
+                double middlePoint = (leftBoundary + rightBoundary) / 2;
+                double valueAtMiddle = function(middlePoint);
 
-                if (IsDiscontinuity(fx))
+                if (double.IsNaN(valueAtMiddle))
                 {
-                    error = "Функция имеет разрыв внутри отрезка";
+                    error = "Функция не определена в точке";
                     return false;
                 }
 
-                if (Math.Abs(fx) < 1e-12 || b - a <= e)
+                if (valueAtLeft * valueAtMiddle < 0)
                 {
-                    root = x;
-                    return true;
-                }
-
-                if (fa * fx < 0)
-                {
-                    b = x;
-                    fb = fx;
+                    rightBoundary = middlePoint;
+                    valueAtRight = valueAtMiddle;
                 }
                 else
                 {
-                    a = x;
-                    fa = fx;
+                    leftBoundary = middlePoint;
+                    valueAtLeft = valueAtMiddle;
                 }
             }
 
-            root = (a + b) / 2;
+            root = (leftBoundary + rightBoundary) / 2;
             return true;
         }
 
-        private List<double> FindAllRoots(Func<double, double> f, double a, double b, double e)
-        {
-            List<double> roots = new List<double>();
-
-            double step = (b - a) / SubIntervals;
-            double prevX = a;
-            double prevFx = f(prevX);
-
-            for (int i = 1; i <= SubIntervals; ++i)
-            {
-                double currentX = a + i * step;
-                double currentFx = f(currentX);
-
-                if (IsDiscontinuity(prevFx) || IsDiscontinuity(currentFx))
-                {
-                    prevX = currentX;
-                    prevFx = currentFx;
-                    continue;
-                }
-
-                if (prevFx * currentFx < 0 || Math.Abs(currentFx) < 1e-12)
-                {
-                    double midX = (prevX + currentX) / 2;
-                    double midFx = f(midX);
-
-                    if (double.IsNaN(midFx) || double.IsInfinity(midFx))
-                    {
-                        prevX = currentX;
-                        prevFx = currentFx;
-                        continue;
-                    }
-
-                    double maxAbs = Math.Max(Math.Abs(prevFx), Math.Abs(currentFx));
-                    maxAbs = Math.Max(maxAbs, Math.Abs(midFx));
-
-                    if (maxAbs > RootSearchJumpLimit)
-                    {
-                        prevX = currentX;
-                        prevFx = currentFx;
-                        continue;
-                    }
-
-                    if (TryBisection(f, prevX, currentX, e, out double root, out string bisectionError))
-                    {
-                        bool isDuplicate = false;
-
-                        foreach (double existing in roots)
-                        {
-                            if (Math.Abs(existing - root) < e)
-                            {
-                                isDuplicate = true;
-                                break;
-                            }
-                        }
-
-                        if (!isDuplicate)
-                        {
-                            roots.Add(root);
-                        }
-                    }
-                }
-
-                prevX = currentX;
-                prevFx = currentFx;
-            }
-
-            roots.Sort();
-            return roots;
-        }
-
-        private void DrawPlot(Func<double, double> f, double a, double b, List<double> roots)
+        private void DrawPlot(Func<double, double> function, double leftBoundary, double rightBoundary, double? root)
         {
             PlotCanvas.Children.Clear();
 
-            double width = PlotCanvas.ActualWidth;
-            double height = PlotCanvas.ActualHeight;
+            double canvasWidth = PlotCanvas.ActualWidth;
+            double canvasHeight = PlotCanvas.ActualHeight;
 
-            if (width <= 2 * PlotMargin || height <= 2 * PlotMargin)
+            if (canvasWidth <= 2 * PlotMargin || canvasHeight <= 2 * PlotMargin) return;
+
+            int pointCount = 500;
+            double[] plotX = new double[pointCount + 1];
+            double[] plotY = new double[pointCount + 1];
+
+            double minValueY = double.MaxValue;
+            double maxValueY = double.MinValue;
+
+            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
             {
-                return;
-            }
+                double currentX = leftBoundary + (rightBoundary - leftBoundary) * pointIndex / pointCount;
+                double currentY = function(currentX);
 
-            int samples = 500;
-            double[] xs = new double[samples + 1];
-            double[] ys = new double[samples + 1];
+                plotX[pointIndex] = currentX;
+                plotY[pointIndex] = currentY;
 
-            double minY = double.MaxValue;
-            double maxY = double.MinValue;
-
-            for (int i = 0; i <= samples; ++i)
-            {
-                double x = a + (b - a) * i / samples;
-                double y = f(x);
-
-                xs[i] = x;
-                ys[i] = y;
-
-                if (!double.IsNaN(y) && !double.IsInfinity(y) && Math.Abs(y) < DiscontinuityThreshold)
+                if (!double.IsNaN(currentY) && !double.IsInfinity(currentY) && Math.Abs(currentY) < 1e6)
                 {
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
+                    if (currentY < minValueY) minValueY = currentY;
+                    if (currentY > maxValueY) maxValueY = currentY;
                 }
             }
 
-            if (minY > maxY)
+            if (minValueY > maxValueY) { minValueY = -1; maxValueY = 1; }
+            double valueRangeY = maxValueY - minValueY;
+            if (valueRangeY < 1e-9) valueRangeY = 1;
+            minValueY -= valueRangeY * 0.1;
+            maxValueY += valueRangeY * 0.1;
+
+            double plottingWidth = canvasWidth - 2 * PlotMargin;
+            double plottingHeight = canvasHeight - 2 * PlotMargin;
+
+            Func<double, double> mapToCanvasX = mathX => PlotMargin + (mathX - leftBoundary) / (rightBoundary - leftBoundary) * plottingWidth;
+            Func<double, double> mapToCanvasY = mathY => canvasHeight - PlotMargin - (mathY - minValueY) / (maxValueY - minValueY) * plottingHeight;
+
+            double axisYPixel = mapToCanvasY(0);
+            if (axisYPixel < PlotMargin) axisYPixel = PlotMargin;
+            if (axisYPixel > canvasHeight - PlotMargin) axisYPixel = canvasHeight - PlotMargin;
+
+            Line xAxisLine = new Line { X1 = PlotMargin, Y1 = axisYPixel, X2 = canvasWidth - PlotMargin, Y2 = axisYPixel, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(xAxisLine);
+
+            double axisXPixel = mapToCanvasX(0);
+            if (axisXPixel < PlotMargin) axisXPixel = PlotMargin;
+            if (axisXPixel > canvasWidth - PlotMargin) axisXPixel = canvasWidth - PlotMargin;
+
+            Line yAxisLine = new Line { X1 = axisXPixel, Y1 = PlotMargin, X2 = axisXPixel, Y2 = canvasHeight - PlotMargin, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(yAxisLine);
+
+            AddAxisLabel(leftBoundary.ToString("F2"), mapToCanvasX(leftBoundary), canvasHeight - PlotMargin + 5);
+            AddAxisLabel(rightBoundary.ToString("F2"), mapToCanvasX(rightBoundary) - 30, canvasHeight - PlotMargin + 5);
+
+            Polyline functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0xE9, 0x1E, 0x63)), StrokeThickness = 2 };
+
+            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
             {
-                minY = -1;
-                maxY = 1;
-            }
+                double currentX = plotX[pointIndex];
+                double currentY = plotY[pointIndex];
 
-            double rangeY = maxY - minY;
-            if (rangeY < 1e-9) rangeY = 1;
-            minY -= rangeY * 0.1;
-            maxY += rangeY * 0.1;
-
-            double plotWidth = width - 2 * PlotMargin;
-            double plotHeight = height - 2 * PlotMargin;
-
-            Func<double, double> mapX = x => PlotMargin + (x - a) / (b - a) * plotWidth;
-            Func<double, double> mapY = y => height - PlotMargin - (y - minY) / (maxY - minY) * plotHeight;
-
-            double axisY = mapY(0);
-            if (axisY < PlotMargin) axisY = PlotMargin;
-            if (axisY > height - PlotMargin) axisY = height - PlotMargin;
-
-            Line xAxis = new Line
-            {
-                X1 = PlotMargin,
-                Y1 = axisY,
-                X2 = width - PlotMargin,
-                Y2 = axisY,
-                Stroke = Brushes.Black,
-                StrokeThickness = 2
-            };
-            PlotCanvas.Children.Add(xAxis);
-
-            double axisX = mapX(0);
-            if (axisX < PlotMargin) axisX = PlotMargin;
-            if (axisX > width - PlotMargin) axisX = width - PlotMargin;
-
-            Line yAxis = new Line
-            {
-                X1 = axisX,
-                Y1 = PlotMargin,
-                X2 = axisX,
-                Y2 = height - PlotMargin,
-                Stroke = Brushes.Black,
-                StrokeThickness = 2
-            };
-            PlotCanvas.Children.Add(yAxis);
-
-            AddLabel(a.ToString("F2"), mapX(a), height - PlotMargin + 5);
-            AddLabel(b.ToString("F2"), mapX(b) - 30, height - PlotMargin + 5);
-
-            Polyline currentPolyline = new Polyline
-            {
-                Stroke = new SolidColorBrush(Color.FromRgb(0xE9, 0x1E, 0x63)),
-                StrokeThickness = 2
-            };
-
-            for (int i = 0; i <= samples; ++i)
-            {
-                double x = xs[i];
-                double y = ys[i];
-
-                if (IsDiscontinuity(y))
+                if (double.IsNaN(currentY) || double.IsInfinity(currentY) || Math.Abs(currentY) > 1e6)
                 {
-                    if (currentPolyline.Points.Count > 0)
+                    if (functionLine.Points.Count > 0)
                     {
-                        PlotCanvas.Children.Add(currentPolyline);
-                        currentPolyline = new Polyline
-                        {
-                            Stroke = new SolidColorBrush(Color.FromRgb(0xE9, 0x1E, 0x63)),
-                            StrokeThickness = 2
-                        };
+                        PlotCanvas.Children.Add(functionLine);
+                        functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0xE9, 0x1E, 0x63)), StrokeThickness = 2 };
                     }
                     continue;
                 }
 
-                double px = mapX(x);
-                double py = mapY(y);
-
-                currentPolyline.Points.Add(new Point(px, py));
+                functionLine.Points.Add(new Point(mapToCanvasX(currentX), mapToCanvasY(currentY)));
             }
 
-            if (currentPolyline.Points.Count > 0)
+            if (functionLine.Points.Count > 0) PlotCanvas.Children.Add(functionLine);
+
+            if (root.HasValue)
             {
-                PlotCanvas.Children.Add(currentPolyline);
-            }
-
-            foreach (double root in roots)
-            {
-                double px = mapX(root);
-                double py = axisY;
-
-                Ellipse dot = new Ellipse
-                {
-                    Width = 12,
-                    Height = 12,
-                    Fill = new SolidColorBrush(Color.FromRgb(0xAD, 0x14, 0x57)),
-                    Stroke = Brushes.Black,
-                    StrokeThickness = 1
-                };
-
-                Canvas.SetLeft(dot, px - 6);
-                Canvas.SetTop(dot, py - 6);
-                PlotCanvas.Children.Add(dot);
+                Ellipse rootMarker = new Ellipse { Width = 12, Height = 12, Fill = new SolidColorBrush(Color.FromRgb(0xAD, 0x14, 0x57)), Stroke = Brushes.Black, StrokeThickness = 1 };
+                Canvas.SetLeft(rootMarker, mapToCanvasX(root.Value) - 6);
+                Canvas.SetTop(rootMarker, axisYPixel - 6);
+                PlotCanvas.Children.Add(rootMarker);
             }
         }
 
-        private void AddLabel(string text, double x, double y)
+        private void AddAxisLabel(string text, double xPosition, double yPosition)
         {
-            TextBlock label = new TextBlock
-            {
-                Text = text,
-                Foreground = Brushes.Black,
-                FontWeight = FontWeights.Bold,
-                FontSize = 11
-            };
-
-            Canvas.SetLeft(label, x);
-            Canvas.SetTop(label, y);
-            PlotCanvas.Children.Add(label);
+            TextBlock axisLabel = new TextBlock { Text = text, Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 11 };
+            Canvas.SetLeft(axisLabel, xPosition);
+            Canvas.SetTop(axisLabel, yPosition);
+            PlotCanvas.Children.Add(axisLabel);
         }
 
         private void ButtonPlot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> f, out double a, out double b, out double epsilon))
-            {
-                return;
-            }
-
-            List<double> roots = FindAllRoots(f, a, b, epsilon);
-            DrawPlot(f, a, b, roots);
+            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
+            DrawPlot(function, leftBoundary, rightBoundary, null);
         }
 
-        private void ButtonFindRoots_Click(object sender, RoutedEventArgs e)
+        private void ButtonFindRoot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> f, out double a, out double b, out double epsilon))
-            {
-                return;
-            }
+            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
 
-            List<double> roots = FindAllRoots(f, a, b, epsilon);
-
-            if (roots.Count == 0)
+            if (TryBisection(function, leftBoundary, rightBoundary, accuracy, out double calculatedRoot, out string bisectionError))
             {
-                TextBoxRoots.Text = "Корни не найдены на отрезке [" + a + "; " + b + "]";
+                TextBoxRoots.Text = "Корень найден:\r\nx = " + calculatedRoot.ToString("F6");
+                DrawPlot(function, leftBoundary, rightBoundary, calculatedRoot);
             }
             else
             {
-                string result = "Найдено корней: " + roots.Count + Environment.NewLine;
-
-                for (int i = 0; i < roots.Count; ++i)
-                {
-                    result += "x" + (i + 1) + " = " + roots[i].ToString("F6") + Environment.NewLine;
-                }
-
-                TextBoxRoots.Text = result;
+                TextBoxRoots.Text = bisectionError;
+                DrawPlot(function, leftBoundary, rightBoundary, null);
             }
-
-            DrawPlot(f, a, b, roots);
         }
 
-        private bool ValidateInputs(out Func<double, double> f, out double a, out double b, out double epsilon)
+        private bool ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)
         {
-            f = null;
-            a = 0;
-            b = 0;
-            epsilon = 0;
+            function = null;
+            leftBoundary = 0;
+            rightBoundary = 0;
+            accuracy = 0;
 
-            if (!TryParseFunction(TextBoxFunction.Text, out f, out string funcError))
+            if (!TryParseFunction(TextBoxFunction.Text, out function, out string formulaError))
             {
-                MessageBox.Show(funcError);
+                MessageBox.Show(formulaError);
                 return false;
             }
 
-            if (!TryParseDouble(TextBoxA.Text, "a", out a, out string aError))
+            if (!TryParseDouble(TextBoxA.Text, "a", out leftBoundary, out string leftBoundaryError))
             {
-                MessageBox.Show(aError);
+                MessageBox.Show(leftBoundaryError);
                 return false;
             }
 
-            if (!TryParseDouble(TextBoxB.Text, "b", out b, out string bError))
+            if (!TryParseDouble(TextBoxB.Text, "b", out rightBoundary, out string rightBoundaryError))
             {
-                MessageBox.Show(bError);
+                MessageBox.Show(rightBoundaryError);
                 return false;
             }
 
-            if (!TryParseDouble(TextBoxE.Text, "e", out epsilon, out string eError))
+            if (!int.TryParse(TextBoxE.Text, out int decimalPlaces))
             {
-                MessageBox.Show(eError);
+                MessageBox.Show("Количество знаков должно быть целым числом");
                 return false;
             }
 
-            if (a >= b)
+            if (decimalPlaces <= 0)
+            {
+                MessageBox.Show("Количество знаков должно быть больше 0");
+                return false;
+            }
+
+            accuracy = 1.0 / Math.Pow(10, decimalPlaces);
+
+            if (leftBoundary >= rightBoundary)
             {
                 MessageBox.Show("a должно быть меньше b");
                 return false;
             }
 
-            if (epsilon <= 0)
+            if (accuracy >= rightBoundary - leftBoundary)
             {
-                MessageBox.Show("Точность e должна быть больше 0");
-                return false;
-            }
-
-            if (epsilon >= b - a)
-            {
-                MessageBox.Show("Точность e должна быть меньше длины отрезка (b - a)");
+                MessageBox.Show("Слишком высокая точность для данного отрезка");
                 return false;
             }
 
@@ -501,7 +327,7 @@ namespace WpfApp1209afvd
             TextBoxFunction.Text = string.Empty;
             TextBoxA.Text = string.Empty;
             TextBoxB.Text = string.Empty;
-            TextBoxE.Text = "0,0001";
+            TextBoxE.Text = string.Empty;
             TextBoxRoots.Text = string.Empty;
             PlotCanvas.Children.Clear();
         }
