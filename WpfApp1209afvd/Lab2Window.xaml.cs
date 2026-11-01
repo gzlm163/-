@@ -113,14 +113,20 @@ namespace WpfApp1209afvd
                 double middlePoint = (leftBoundary + rightBoundary) / 2;
                 double valueAtMiddle = function(middlePoint);
 
-
                 if (double.IsNaN(valueAtMiddle) || Math.Abs(valueAtMiddle) > 1000000)
                 {
                     error = "Функция имеет разрыв на отрезке";
                     return false;
                 }
 
-                if (valueAtLeft * valueAtMiddle < 0 || Math.Abs(valueAtMiddle) < 1e-12)
+                // Досрочный выход, если попали ровно в ноль
+                if (Math.Abs(valueAtMiddle) < 1e-12)
+                {
+                    root = middlePoint;
+                    return true;
+                }
+
+                if (valueAtLeft * valueAtMiddle < 0)
                 {
                     rightBoundary = middlePoint;
                     valueAtRight = valueAtMiddle;

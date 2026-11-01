@@ -1,5 +1,6 @@
 ﻿using NCalc;
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -88,35 +89,45 @@ namespace WpfApp1209afvd
             return true;
         }
 
-        private void FindIsolationInterval(Func<double, double> function, double start, double end, bool findMax, out double left, out double right, out string error)
+        private List<(double left, double right)> FindAllIsolationIntervals(Func<double, double> function, double start, double end, bool findMax)
         {
-            left = start;
-            right = end;
-            error = null;
+            List<(double left, double right)> intervals = new List<(double, double)>();
+            double step = (end - start) / 200.0;
 
-            double h = (end - start) / 100.0;
-            double x = start;
-            double fx = function(x);
+            double previousX = start;
+            double previousFx = function(previousX);
+            double currentX = start + step;
+            double currentFx = function(currentX);
 
-            while (x + h <= end)
+            while (currentX <= end)
             {
-                double xNext = x + h;
-                double fxNext = function(xNext);
+                double nextX = currentX + step;
+                if (nextX > end) break;
+                double nextFx = function(nextX);
 
-                bool found = findMax ? (fxNext < fx) : (fxNext > fx);
+                bool isExtremum = false;
 
-                if (found)
+                if (findMax)
                 {
-                    left = x - h;
-                    right = xNext;
-                    return;
+                    if (previousFx < currentFx && currentFx > nextFx) isExtremum = true;
+                }
+                else
+                {
+                    if (previousFx > currentFx && currentFx < nextFx) isExtremum = true;
                 }
 
-                x = xNext;
-                fx = fxNext;
+                if (isExtremum)
+                {
+                    intervals.Add((previousX, nextX));
+                }
+
+                previousX = currentX;
+                previousFx = currentFx;
+                currentX = nextX;
+                currentFx = nextFx;
             }
 
-            error = "На отрезке нет экстремума (функция монотонна)";
+            return intervals;
         }
 
         private double GoldenSectionSearch(Func<double, double> function, double left, double right, double accuracy, bool findMax)
@@ -126,10 +137,10 @@ namespace WpfApp1209afvd
             double x1 = left + alpha * (right - left);
             double x2 = right - alpha * (right - left);
 
-            Func<double, double> f = findMax ? (x => -function(x)) : function;
+            Func<double, double> targetFunction = findMax ? (x => -function(x)) : function;
 
-            double f1 = f(x1);
-            double f2 = f(x2);
+            double f1 = targetFunction(x1);
+            double f2 = targetFunction(x2);
 
             while (Math.Abs(right - left) > accuracy)
             {
@@ -139,7 +150,7 @@ namespace WpfApp1209afvd
                     x2 = x1;
                     f2 = f1;
                     x1 = left + alpha * (right - left);
-                    f1 = f(x1);
+                    f1 = targetFunction(x1);
                 }
                 else
                 {
@@ -147,7 +158,7 @@ namespace WpfApp1209afvd
                     x1 = x2;
                     f1 = f2;
                     x2 = right - alpha * (right - left);
-                    f2 = f(x2);
+                    f2 = targetFunction(x2);
                 }
             }
 
@@ -171,14 +182,15 @@ namespace WpfApp1209afvd
             double minValueY = double.MaxValue;
             double maxValueY = double.MinValue;
 
-            for (int i = 0; i <= pointCount; ++i)
+            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
             {
-                double x = left + (right - left) * i / pointCount;
-                double y = function(x);
-                if (!double.IsNaN(y) && !double.IsInfinity(y) && Math.Abs(y) < 1e6)
+                double currentX = left + (right - left) * pointIndex / pointCount;
+                double currentY = function(currentX);
+
+                if (!double.IsNaN(currentY) && !double.IsInfinity(currentY) && Math.Abs(currentY) < 1e6)
                 {
-                    if (y < minValueY) minValueY = y;
-                    if (y > maxValueY) maxValueY = y;
+                    if (currentY < minValueY) minValueY = currentY;
+                    if (currentY > maxValueY) maxValueY = currentY;
                 }
             }
 
@@ -194,56 +206,100 @@ namespace WpfApp1209afvd
             Func<double, double> mapToCanvasX = mathX => PlotMargin + (mathX - left) / (right - left) * plotWidth;
             Func<double, double> mapToCanvasY = mathY => canvasHeight - PlotMargin - (mathY - minValueY) / (maxValueY - minValueY) * plotHeight;
 
-            double axisY = mapToCanvasY(0);
-            if (axisY < PlotMargin) axisY = PlotMargin;
-            if (axisY > canvasHeight - PlotMargin) axisY = canvasHeight - PlotMargin;
+            double axisYPixel = mapToCanvasY(0);
+            if (axisYPixel < PlotMargin) axisYPixel = PlotMargin;
+            if (axisYPixel > canvasHeight - PlotMargin) axisYPixel = canvasHeight - PlotMargin;
 
-            Line xAxis = new Line { X1 = PlotMargin, Y1 = axisY, X2 = canvasWidth - PlotMargin, Y2 = axisY, Stroke = Brushes.Black, StrokeThickness = 2 };
-            PlotCanvas.Children.Add(xAxis);
+            double axisXPixel = mapToCanvasX(0);
+            if (axisXPixel < PlotMargin) axisXPixel = PlotMargin;
+            if (axisXPixel > canvasWidth - PlotMargin) axisXPixel = canvasWidth - PlotMargin;
 
-            double axisX = mapToCanvasX(0);
-            if (axisX < PlotMargin) axisX = PlotMargin;
-            if (axisX > canvasWidth - PlotMargin) axisX = canvasWidth - PlotMargin;
+            Line xAxisLine = new Line { X1 = PlotMargin, Y1 = axisYPixel, X2 = canvasWidth - PlotMargin - 10, Y2 = axisYPixel, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(xAxisLine);
+            Polygon xArrow = new Polygon { Fill = Brushes.Black, Points = new PointCollection { new Point(canvasWidth - PlotMargin, axisYPixel), new Point(canvasWidth - PlotMargin - 10, axisYPixel - 5), new Point(canvasWidth - PlotMargin - 10, axisYPixel + 5) } };
+            PlotCanvas.Children.Add(xArrow);
 
-            Line yAxis = new Line { X1 = axisX, Y1 = PlotMargin, X2 = axisX, Y2 = canvasHeight - PlotMargin, Stroke = Brushes.Black, StrokeThickness = 2 };
-            PlotCanvas.Children.Add(yAxis);
+            Line yAxisLine = new Line { X1 = axisXPixel, Y1 = canvasHeight - PlotMargin, X2 = axisXPixel, Y2 = PlotMargin + 10, Stroke = Brushes.Black, StrokeThickness = 2 };
+            PlotCanvas.Children.Add(yAxisLine);
+            Polygon yArrow = new Polygon { Fill = Brushes.Black, Points = new PointCollection { new Point(axisXPixel, PlotMargin), new Point(axisXPixel - 5, PlotMargin + 10), new Point(axisXPixel + 5, PlotMargin + 10) } };
+            PlotCanvas.Children.Add(yArrow);
 
-            AddAxisLabel(left.ToString("F2"), mapToCanvasX(left), canvasHeight - PlotMargin + 5);
-            AddAxisLabel(right.ToString("F2"), mapToCanvasX(right) - 30, canvasHeight - PlotMargin + 5);
+            AddAxisLabel("X", canvasWidth - PlotMargin + 5, axisYPixel - 10);
+            AddAxisLabel("Y", axisXPixel + 5, PlotMargin);
 
-            Polyline line = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
-
-            for (int i = 0; i <= pointCount; ++i)
+            Func<double, double> getNiceStep = (range) =>
             {
-                double x = left + (right - left) * i / pointCount;
-                double y = function(x);
+                double rawStep = range / 8.0;
+                double magnitude = Math.Pow(10, Math.Floor(Math.Log10(rawStep)));
+                double normalizedStep = rawStep / magnitude;
 
-                if (double.IsNaN(y) || double.IsInfinity(y) || Math.Abs(y) > 1e6)
+                if (normalizedStep < 1.5) return magnitude;
+                if (normalizedStep < 3.0) return 2 * magnitude;
+                if (normalizedStep < 7.0) return 5 * magnitude;
+                return 10 * magnitude;
+            };
+
+            double stepX = getNiceStep(right - left);
+            double startX = Math.Ceiling(left / stepX) * stepX;
+            for (double tickX = startX; tickX <= right; tickX += stepX)
+            {
+                double px = mapToCanvasX(tickX);
+                Line tickLine = new Line { X1 = px, Y1 = axisYPixel - 3, X2 = px, Y2 = axisYPixel + 3, Stroke = Brushes.Black, StrokeThickness = 1 };
+                PlotCanvas.Children.Add(tickLine);
+                AddAxisLabel(tickX.ToString("G"), px - 10, axisYPixel + 5);
+            }
+
+            double stepY = getNiceStep(maxValueY - minValueY);
+            double startY = Math.Ceiling(minValueY / stepY) * stepY;
+            for (double tickY = startY; tickY <= maxValueY; tickY += stepY)
+            {
+                double py = mapToCanvasY(tickY);
+                Line tickLine = new Line { X1 = axisXPixel - 3, Y1 = py, X2 = axisXPixel + 3, Y2 = py, Stroke = Brushes.Black, StrokeThickness = 1 };
+                PlotCanvas.Children.Add(tickLine);
+
+                if (Math.Abs(tickY) > stepY / 10)
                 {
-                    if (line.Points.Count > 0)
+                    var label = new TextBlock { Text = tickY.ToString("G"), FontSize = 11, FontWeight = FontWeights.Bold };
+                    label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    double textWidth = label.DesiredSize.Width;
+                    double labelX = axisXPixel < 40 ? axisXPixel + 8 : axisXPixel - textWidth - 5;
+                    AddAxisLabel(tickY.ToString("G"), labelX, py - 8);
+                }
+            }
+
+            Polyline functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
+
+            for (int pointIndex = 0; pointIndex <= pointCount; ++pointIndex)
+            {
+                double currentX = left + (right - left) * pointIndex / pointCount;
+                double currentY = function(currentX);
+
+                if (double.IsNaN(currentY) || double.IsInfinity(currentY) || Math.Abs(currentY) > 1e6)
+                {
+                    if (functionLine.Points.Count > 0)
                     {
-                        PlotCanvas.Children.Add(line);
-                        line = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
+                        PlotCanvas.Children.Add(functionLine);
+                        functionLine = new Polyline { Stroke = new SolidColorBrush(Color.FromRgb(0x8E, 0x24, 0xAA)), StrokeThickness = 2 };
                     }
                     continue;
                 }
-                line.Points.Add(new Point(mapToCanvasX(x), mapToCanvasY(y)));
+                functionLine.Points.Add(new Point(mapToCanvasX(currentX), mapToCanvasY(currentY)));
             }
-            if (line.Points.Count > 0) PlotCanvas.Children.Add(line);
+            if (functionLine.Points.Count > 0) PlotCanvas.Children.Add(functionLine);
 
             if (specialPointX.HasValue)
             {
-                double px = mapToCanvasX(specialPointX.Value);
-                double py = mapToCanvasY(function(specialPointX.Value));
+                double pixelX = mapToCanvasX(specialPointX.Value);
+                double pixelY = mapToCanvasY(function(specialPointX.Value));
 
                 Ellipse marker = new Ellipse { Width = 12, Height = 12, Fill = new SolidColorBrush(Color.FromRgb(0x4A, 0x14, 0x8C)), Stroke = Brushes.White, StrokeThickness = 1 };
-                Canvas.SetLeft(marker, px - 6);
-                Canvas.SetTop(marker, py - 6);
+                Canvas.SetLeft(marker, pixelX - 6);
+                Canvas.SetTop(marker, pixelY - 6);
                 PlotCanvas.Children.Add(marker);
 
                 TextBlock label = new TextBlock { Text = pointType, Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 12 };
-                Canvas.SetLeft(label, px + 10);
-                Canvas.SetTop(label, py - 10);
+                Canvas.SetLeft(label, pixelX + 10);
+                Canvas.SetTop(label, pixelY - 10);
                 PlotCanvas.Children.Add(label);
             }
         }
@@ -258,65 +314,99 @@ namespace WpfApp1209afvd
 
         private void ButtonPlot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
-            DrawPlot(function, a, b, null, "");
+            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
+            DrawPlot(function, leftBoundary, rightBoundary, null, "");
         }
 
         private void ButtonFindExtremum_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
+            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
 
             bool isMax = RadioMax.IsChecked == true;
 
-            FindIsolationInterval(function, a, b, isMax, out double left, out double right, out string isolationError);
+            var intervals = FindAllIsolationIntervals(function, leftBoundary, rightBoundary, isMax);
 
-            if (isolationError != null)
+            if (intervals.Count == 0)
             {
-                TextBoxResult.Text = isolationError;
+                string type = isMax ? "максимумов" : "минимумов";
+                TextBoxResult.Text = $"На отрезке нет {type}";
+                DrawPlot(function, leftBoundary, rightBoundary, null, "");
                 return;
             }
 
-            double extremumX = GoldenSectionSearch(function, left, right, accuracy, isMax);
+            var targetInterval = intervals[0];
+
+            double extremumX = GoldenSectionSearch(function, targetInterval.left, targetInterval.right, accuracy, isMax);
             double extremumY = function(extremumX);
 
-            string type = isMax ? "Максимум" : "Минимум";
-            TextBoxResult.Text = $"{type}:\r\nx = {extremumX:F6}\r\ny = {extremumY:F6}";
-            DrawPlot(function, a, b, extremumX, type);
+            string resultType = isMax ? "Максимум" : "Минимум";
+            TextBoxResult.Text = $"{resultType}:\r\nx = {extremumX:F6}\r\ny = {extremumY:F6}";
+            DrawPlot(function, leftBoundary, rightBoundary, extremumX, resultType);
         }
 
         private void ButtonFindRoot_Click(object sender, RoutedEventArgs e)
         {
-            if (!ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)) return;
+            if (!ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)) return;
 
-            double rootX = FindRoot(function, a, b, accuracy);
-            double rootY = function(rootX);
+            int partsCount = 100;
+            double step = (rightBoundary - leftBoundary) / partsCount;
+            double foundRoot = double.NaN;
+            bool rootFound = false;
 
-            if (Math.Abs(rootY) > accuracy)
+            for (int partIndex = 0; partIndex < partsCount; partIndex++)
+            {
+                double currentLeft = leftBoundary + partIndex * step;
+                double currentRight = currentLeft + step;
+
+                double leftValue = function(currentLeft);
+                double rightValue = function(currentRight);
+
+                if (double.IsNaN(leftValue) || double.IsNaN(rightValue)) continue;
+                if (Math.Abs(leftValue) > 1000000 || Math.Abs(rightValue) > 1000000) continue;
+
+                bool signChanged = leftValue * rightValue < 0;
+                bool nearZero = Math.Abs(leftValue) < 1e-5 || Math.Abs(rightValue) < 1e-5;
+
+                if (signChanged || nearZero)
+                {
+                    foundRoot = FindRoot(function, currentLeft, currentRight, accuracy);
+
+                    double rootValue = function(foundRoot);
+                    if (Math.Abs(rootValue) < accuracy)
+                    {
+                        rootFound = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!rootFound)
             {
                 TextBoxResult.Text = "Корень не найден (функция не пересекает ноль)";
-                DrawPlot(function, a, b, null, "");
+                DrawPlot(function, leftBoundary, rightBoundary, null, "");
                 return;
             }
 
-            TextBoxResult.Text = $"Корень:\r\nx = {rootX:F6}\r\ny = {rootY:F6}";
-            DrawPlot(function, a, b, rootX, "Корень");
+            double rootY = function(foundRoot);
+            TextBoxResult.Text = $"Корень:\r\nx = {foundRoot:F6}\r\ny = {rootY:F6}";
+            DrawPlot(function, leftBoundary, rightBoundary, foundRoot, "Корень");
         }
 
-        private bool ValidateInputs(out Func<double, double> function, out double a, out double b, out double accuracy)
+        private bool ValidateInputs(out Func<double, double> function, out double leftBoundary, out double rightBoundary, out double accuracy)
         {
-            function = null; a = 0; b = 0; accuracy = 0;
+            function = null; leftBoundary = 0; rightBoundary = 0; accuracy = 0;
 
-            if (!TryParseFunction(TextBoxFunction.Text, out function, out string fError)) { MessageBox.Show(fError); return false; }
-            if (!TryParseDouble(TextBoxA.Text, "a", out a, out string aError)) { MessageBox.Show(aError); return false; }
-            if (!TryParseDouble(TextBoxB.Text, "b", out b, out string bError)) { MessageBox.Show(bError); return false; }
+            if (!TryParseFunction(TextBoxFunction.Text, out function, out string formulaError)) { MessageBox.Show(formulaError); return false; }
+            if (!TryParseDouble(TextBoxA.Text, "a", out leftBoundary, out string leftError)) { MessageBox.Show(leftError); return false; }
+            if (!TryParseDouble(TextBoxB.Text, "b", out rightBoundary, out string rightError)) { MessageBox.Show(rightError); return false; }
 
-            if (!int.TryParse(TextBoxE.Text, out int decimalPlaces)) { MessageBox.Show("Количество знаков целое число"); return false; }
-            if (decimalPlaces <= 0) { MessageBox.Show("Количество знаков > 0"); return false; }
+            if (!int.TryParse(TextBoxE.Text, out int decimalPlaces)) { MessageBox.Show("Количество знаков должно быть целым числом"); return false; }
+            if (decimalPlaces <= 0) { MessageBox.Show("Количество знаков должно быть больше 0"); return false; }
 
             accuracy = 1.0 / Math.Pow(10, decimalPlaces);
 
-            if (a >= b) { MessageBox.Show("a должно быть меньше b"); return false; }
-            if (accuracy >= b - a) { MessageBox.Show("Слишком высокая точность"); return false; }
+            if (leftBoundary >= rightBoundary) { MessageBox.Show("a должно быть меньше b"); return false; }
+            if (accuracy >= rightBoundary - leftBoundary) { MessageBox.Show("Слишком высокая точность для данного отрезка"); return false; }
 
             return true;
         }
