@@ -1,23 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows;
 
 namespace WpfApp1209afvd
 {
-    /// <summary>
-    /// Логика взаимодействия для MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         public MainWindow()
@@ -30,15 +14,23 @@ namespace WpfApp1209afvd
             Lab1Window lab1 = new Lab1Window();
             lab1.Show();
         }
+
         private void Lab2Button_Click(object sender, RoutedEventArgs e)
         {
             Lab2Window lab2 = new Lab2Window();
             lab2.Show();
         }
+
         private void Lab3Button_Click(object sender, RoutedEventArgs e)
         {
             Lab3Window lab3 = new Lab3Window();
             lab3.Show();
+        }
+
+        private void Lab4Button_Click(object sender, RoutedEventArgs e)
+        {
+            Lab4Window lab4 = new Lab4Window();
+            lab4.Show();
         }
     }
 }

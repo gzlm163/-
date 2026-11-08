@@ -9,7 +9,6 @@
         Background="#FF85C1">
 
     <Grid>
-        <!-- Кнопка 1 (оригинальная) -->
         <Button Content="1" 
                 Width="200" 
                 Height="60" 
@@ -38,7 +37,6 @@
             </Button.Template>
         </Button>
 
-        <!-- Кнопка 2 (оригинальная) -->
         <Button Content="2" 
                 Width="90" 
                 Height="90" 
@@ -70,7 +68,6 @@
             </Button.Template>
         </Button>
 
-        <!-- Кнопка 3 (новая, лиловая, вертикальная, справа сверху) -->
         <Button Content="3" 
                 Width="60" 
                 Height="120" 
@@ -95,6 +92,37 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="border" Property="Background" Value="#7E57C2"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <Button Content="4" 
+                Width="120" 
+                Height="50" 
+                Foreground="Black" 
+                FontSize="24" 
+                FontWeight="Bold"
+                BorderBrush="Black"
+                BorderThickness="4"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="40,40,0,0"
+                Click="Lab4Button_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" 
+                            Background="#FF8FAB" 
+                            BorderBrush="Black" 
+                            BorderThickness="4" 
+                            CornerRadius="25">
+                        <ContentPresenter HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#FF5E80"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
